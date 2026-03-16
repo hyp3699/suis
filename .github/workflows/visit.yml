@@ -2,7 +2,10 @@ name: Auto Visit
 
 on:
   schedule:
-    - cron: "0 0 * * *"
+    - cron: "0 17 * * *"   # 中国 01:00
+    - cron: "0 1 * * *"    # 中国 09:00
+    - cron: "0 8 * * *"    # 中国 16:00
+    - cron: "0 14 * * *"   # 中国 22:00
   workflow_dispatch:
 
 jobs:
