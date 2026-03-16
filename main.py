@@ -66,7 +66,7 @@ def main():
 
     for url in sites:
         # 每个网站访问前随机等待 10~120 分钟
-        delay = 1
+        delay = random.randint(5, 30)
         print(f"\n[INFO] 即将访问：{url}")
         print(f"[INFO] 随机等待 {delay} 秒后开始访问")
         time.sleep(delay)
