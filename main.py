@@ -7,12 +7,17 @@ import urllib3
 # 关闭 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
+# 固定时间触发后，再随机等待 5~30 秒
+extra_delay = random.randint(5, 30)
+print(f"[INFO] 固定时间触发，随机等待 {extra_delay} 秒")
+time.sleep(extra_delay)
+
 # 读取网站列表
 def load_sites():
     with open("sites.txt", "r", encoding="utf-8") as f:
         return [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-# 读取配置（混淆后的 Token）
+# 读取配置（混淆后的 Token + 推送开关）
 def load_config():
     config = {}
     with open("config.txt", "r", encoding="utf-8") as f:
@@ -62,20 +67,19 @@ def main():
     bot_token = decode(config["BOT_TOKEN_PART1"]) + decode(config["BOT_TOKEN_PART2"])
     chat_id = decode(config["CHAT_ID_BASE64"])
 
+    # 推送开关
+    push_enabled = config.get("TELEGRAM_PUSH", "on").lower() == "on"
+    print(f"[INFO] Telegram 推送状态: {'开启' if push_enabled else '关闭'}")
+
     print(f"[INFO] 共加载 {len(sites)} 个网站")
 
     for url in sites:
-        # 每个网站访问前随机等待 10~120 分钟
-        delay = random.randint(5, 30)
-        print(f"\n[INFO] 即将访问：{url}")
-        print(f"[INFO] 随机等待 {delay} 秒后开始访问")
-        time.sleep(delay)
-
         result = visit(url)
         print(result)
 
-        # 推送到 Telegram
-        send_telegram(bot_token, chat_id, result)
+        # 如果开启推送，则发送 Telegram
+        if push_enabled:
+            send_telegram(bot_token, chat_id, result)
 
 if __name__ == "__main__":
     main()
