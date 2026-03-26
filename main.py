@@ -1,86 +1,72 @@
 import time
 import random
 import requests
-import base64
 import urllib3
+import os
 
 # 关闭 SSL 警告
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-# 固定时间触发后，再随机等待 5~30 秒
-extra_delay = random.randint(5, 30)
-print(f"[INFO] 固定时间触发，随机等待 {extra_delay} 秒")
-time.sleep(extra_delay)
-
-# 读取网站列表
+# 读取网站列表 (保持原逻辑，读取同目录下的 sites.txt)
 def load_sites():
-    with open("sites.txt", "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    try:
+        with open("sites.txt", "r", encoding="utf-8") as f:
+            return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+    except FileNotFoundError:
+        print("[ERROR] 找不到 sites.txt 文件")
+        return []
 
-# 读取配置（混淆后的 Token + 推送开关）
-def load_config():
-    config = {}
-    with open("config.txt", "r", encoding="utf-8") as f:
-        for line in f:
-            if "=" in line:
-                key, value = line.strip().split("=", 1)
-                config[key] = value
-    return config
-
-# Base64 解码
-def decode(s):
-    return base64.b64decode(s).decode()
-
-# Telegram 推送
+# Telegram 推送函数
 def send_telegram(bot_token, chat_id, message):
+    if not bot_token or not chat_id:
+        print("[WARN] Telegram 配置缺失，跳过推送")
+        return
+    
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     try:
-        requests.post(url, data={"chat_id": chat_id, "text": message})
+        # 使用 Markdown 格式让输出更整齐
+        requests.post(url, data={"chat_id": chat_id, "text": message, "parse_mode": "Markdown"}, timeout=20)
     except Exception as e:
         print(f"[ERROR] Telegram 推送失败: {e}")
 
-# 自动 SSL 容错 + 自动重试访问
+# 访问逻辑
 def visit(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
-
-    for attempt in range(1, 4):  # 自动重试 3 次
+    for attempt in range(1, 4):
         try:
             resp = requests.get(url, headers=headers, timeout=20, verify=False)
-            return f"[OK] {url} 状态码: {resp.status_code}"
-
-        except requests.exceptions.SSLError as e:
-            return f"[SSL ERROR] {url} 证书验证失败: {e}"
-
+            return f"✅ `{url}` 状态码: {resp.status_code}"
         except Exception as e:
             if attempt < 3:
-                time.sleep(2)  # 重试前等待 2 秒
+                time.sleep(2)
                 continue
-            return f"[ERROR] {url} 访问失败（已重试 3 次）: {e}"
+            return f"❌ `{url}` 访问失败: {str(e)[:50]}..."
 
 def main():
+    # 从环境变量获取敏感信息 (GitHub Actions 会自动填入)
+    bot_token = os.environ.get("BOT_TOKEN")
+    chat_id = os.environ.get("CHAT_ID")
+    
+    # 随机等待 5~30 秒 (模拟真人/防检测)
+    extra_delay = random.randint(5, 30)
+    print(f"[INFO] 随机等待 {extra_delay} 秒...")
+    time.sleep(extra_delay)
+
     sites = load_sites()
-    config = load_config()
-
-    # 解混淆（你在混淆网站生成的 Base64 分段）
-    bot_token = decode(config["BOT_TOKEN_PART1"]) + decode(config["BOT_TOKEN_PART2"])
-    chat_id = decode(config["CHAT_ID_BASE64"])
-
-    # 推送开关
-    push_enabled = config.get("TELEGRAM_PUSH", "on").lower() == "on"
-    print(f"[INFO] Telegram 推送状态: {'开启' if push_enabled else '关闭'}")
-
     print(f"[INFO] 共加载 {len(sites)} 个网站")
 
+    results = []
     for url in sites:
-        result = visit(url)
-        print(result)
+        res = visit(url)
+        print(res)
+        results.append(res)
 
-        # 如果开启推送，则发送 Telegram
-        if push_enabled:
-            send_telegram(bot_token, chat_id, result)
+    # 汇总发送，避免被 Telegram 频率限制
+    if results:
+        full_report = "🌐 **站点访问报告**\n\n" + "\n".join(results)
+        send_telegram(bot_token, chat_id, full_report)
 
 if __name__ == "__main__":
     main()
-    
